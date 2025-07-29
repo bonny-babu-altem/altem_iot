@@ -12,11 +12,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Docker image
-        run: docker build -t altemIOT:latest .
+      - name: Prune old Docker containers and images
+        run: |
+          docker system prune -f
 
+      - name: Build Docker image
+        run: |
+          IMAGE_TAG=altemIOT:${{ github.sha }}
+          docker build -t $IMAGE_TAG .
+          docker tag $IMAGE_TAG altemIOT:latest
+      
       - name: Run Docker container
         run: |
           docker stop altemIOT || true
           docker rm altemIOT || true
-          docker run -d --name altemIOT -p 4000:4000 altemIOT:latest
+          docker run -d --name altemIOT \
+            -p 4000:4000 \
+            -e DISPLAY=:0 \
+            -e F170_TB_MQTT_ACCESS_TOKEN=${{ secrets.F170_TB_MQTT_ACCESS_TOKEN }} \
+            --log-opt max-size=10m --log-opt max-file=3 \
+            --memory=1g --cpus=1.0 \
+            altemIOT:latest
+
+      - name: Show container logs if failed
+        if: failure()
+        run: docker logs altemIOT
+

@@ -1,33 +1,31 @@
-# docker/Dockerfile
 FROM ros:jazzy
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     python3-pip \
-    git curl wget \
+    python3-colcon-common-extensions \
     build-essential \
+    net-tools \
+    iputils-ping \
     && rm -rf /var/lib/apt/lists/*
 
-# Optional GUI tools (you can comment/uncomment later)
-# RUN apt-get update && apt-get install -y \
-#     ros-jazzy-rviz2 \
-#     ros-jazzy-gazebo-ros-pkgs \
-#     && rm -rf /var/lib/apt/lists/*
+# Install python dependencies
+RUN pip install --break-system-packages python-dotenv requests paho-mqtt
 
-SHELL ["/bin/bash", "-c"]
+# Copy ROS workspace source code into image
+COPY ./ros_workspace /ros_workspace
 
-# Source ROS setup in bash
-RUN echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
+# Build workspace inside the image
+WORKDIR /ros_workspace
 
-# Setup workspace
-ENV ROS_WS=/ros_workspace
-WORKDIR $ROS_WS
+# Source ROS setup script and build
+RUN . /opt/ros/jazzy/setup.sh && \
+    colcon build --symlink-install
 
-COPY ./ros_workspace/src ./src
+# Copy entrypoint with executable permission
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-RUN apt-get update && rosdep update && \
-    rosdep install --from-paths src --ignore-src -r -y
-
-RUN . /opt/ros/jazzy/setup.bash && colcon build
-
-RUN echo "source $ROS_WS/install/setup.bash" >> ~/.bashrc
+# Entrypoint and default command
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["ros2", "launch", "stratasys_f170", "f170.launch.py"]

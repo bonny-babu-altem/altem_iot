@@ -7,11 +7,18 @@
 	"settings": {
 		"cSpell.words": [
 			"altem",
+			"altempi",
 			"colcon",
+			"cpus",
 			"MITSHM",
+			"paho",
 			"pkgs",
+			"pytest",
 			"rosdep",
-			"rviz"
+			"rviz",
+			"schematypens",
+			"stratasys",
+			"THINGSBOARD"
 		]
 	}
 }
