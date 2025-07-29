@@ -1,0 +1,22 @@
+name: Deploy on Stable Merge
+
+on:
+  push:
+    branches:
+      - stable
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, arm64]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t altemIOT:latest .
+
+      - name: Run Docker container
+        run: |
+          docker stop altemIOT || true
+          docker rm altemIOT || true
+          docker run -d --name altemIOT -p 4000:4000 altemIOT:latest
