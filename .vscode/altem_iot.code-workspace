@@ -4,5 +4,14 @@
 			"path": ".."
 		}
 	],
-	"settings": {}
+	"settings": {
+		"cSpell.words": [
+			"altem",
+			"colcon",
+			"MITSHM",
+			"pkgs",
+			"rosdep",
+			"rviz"
+		]
+	}
 }

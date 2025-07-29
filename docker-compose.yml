@@ -1,0 +1,18 @@
+version: '3.8'
+services:
+  ros:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: altem_iot
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - ROS_DOMAIN_ID=0
+    volumes:
+      - ./ros2_ws:/ros2_ws
+      - /tmp/.X11-unix:/tmp/.X11-unix  # GUI forwarding for RViz/Gazebo later
+    network_mode: host
+    privileged: true
+    stdin_open: true
+    tty: true
