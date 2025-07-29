@@ -1,0 +1,15 @@
+services:
+  ros:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: f170_ros
+    env_file:
+      - ./.env
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    network_mode: host
+    stdin_open: true
+    tty: true
+    environment:
+      - DISPLAY=${DISPLAY}
