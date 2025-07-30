@@ -1,8 +1,8 @@
+version: "3.8"
+
 services:
   ros:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
+    image: bonnybk/altem_iot:latest  # <-- Change this to your image
     container_name: f170_ros
     environment:
       DISPLAY: ${DISPLAY}
