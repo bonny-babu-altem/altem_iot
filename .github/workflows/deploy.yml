@@ -64,6 +64,14 @@ jobs:
                 \"env\": []
               }")
             echo "Create response: $RESPONSE"
+
+            HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
+            HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+            
+            echo "Status code: $HTTP_STATUS"
+            echo "Response body: $HTTP_BODY"
+
+            echo "$COMPOSE_CONTENT" > debug_compose.json
           fi
 
       - name: Show logs if deployment fails
