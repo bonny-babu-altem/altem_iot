@@ -1,6 +1,7 @@
 import json
 from typing import Any
 import rclpy
+from rclpy.impl.rcutils_logger import RcutilsLogger
 from rclpy.node import Node
 from rclpy.publisher import Publisher
 from rclpy.timer import Timer
@@ -29,8 +30,12 @@ class F170(Node):
         self.publisher_: Publisher = self.create_publisher(
             String, 'status', 10)
 
-        self.iot = MQTT(token=self.access_token,
-                        host=self.tb_host, port=self.tb_port)
+        self.iot = MQTT(
+            token=self.access_token,
+            log=self.get_logger(),
+            host=self.tb_host,
+            port=self.tb_port
+        )
 
         self.get_logger().info(f'TB: {self.tb_host}:{self.tb_port}')
         self.get_logger().info(f'F170 IP: {self.device_ip}')
@@ -42,7 +47,10 @@ class F170(Node):
     def publish_callback(self) -> None:
         parsed_data: None | dict[str, Any] = self.get_device_data()
         if parsed_data is None:
+            self.get_logger().warning('No data received from f170 device')
             return
+
+        self.get_logger().debug(f'Received {parsed_data}')
 
         self.msg = String()
         self.msg.data = json.dumps(parsed_data)
