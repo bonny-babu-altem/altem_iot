@@ -30,8 +30,8 @@ jobs:
           ENDPOINT_ID: "3"
           STACK_NAME: "altem_iot"
         run: |
-          sudo apt-get update
-          sudo apt-get install -y jq curl
+          apt-get update
+          apt-get install -y jq curl
 
           # Read compose file content and escape as JSON string
           COMPOSE_FILE_PATH=docker-compose.yml
