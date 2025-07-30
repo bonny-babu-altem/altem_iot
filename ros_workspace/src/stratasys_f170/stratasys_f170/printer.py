@@ -39,7 +39,6 @@ class F170(Node):
 
         self.get_logger().info(f'TB: {self.tb_host}:{self.tb_port}')
         self.get_logger().info(f'F170 IP: {self.device_ip}')
-        self.get_logger().info(f'Token: {self.access_token}')
 
         self.iot.connect()
 

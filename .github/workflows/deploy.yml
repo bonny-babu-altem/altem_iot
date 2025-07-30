@@ -19,12 +19,6 @@ jobs:
       - name: Shut down any running Compose stack
         run: docker-compose -f docker-compose.yml down || true
 
-      - name: Debug env
-        env:
-          F170_TB_MQTT_ACCESS_TOKEN: ${{ secrets.F170_TB_MQTT_ACCESS_TOKEN }}
-        run: |
-          echo "F170_TB_MQTT_ACCESS_TOKEN='$F170_TB_MQTT_ACCESS_TOKEN'"
-
       - name: Build and deploy with docker-compose
         env:
           DISPLAY: ":0"
