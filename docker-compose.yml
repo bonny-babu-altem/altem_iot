@@ -4,12 +4,11 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     container_name: f170_ros
-    env_file:
-      - ./.env
+    environment:
+      DISPLAY: ${DISPLAY}
+      F170_TB_MQTT_ACCESS_TOKEN: ${F170_TB_MQTT_ACCESS_TOKEN}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
     network_mode: host
     stdin_open: true
     tty: true
-    environment:
-      - DISPLAY=${DISPLAY}
