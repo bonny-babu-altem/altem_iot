@@ -10,31 +10,21 @@ jobs:
     runs-on: [self-hosted, linux, arm64]
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Prune old Docker containers and images
-        run: |
-          docker system prune -f
+        run: docker system prune -f
 
-      - name: Build Docker image
-        run: |
-          IMAGE_TAG=altem_iot:${{ github.sha }}
-          docker build -t $IMAGE_TAG .
-          docker tag $IMAGE_TAG altem_iot:latest
-      
-      - name: Run Docker container
-        run: |
-          docker stop altem_iot || true
-          docker rm altem_iot || true
-          docker run -d --name altem_iot \
-            -p 4000:4000 \
-            -e DISPLAY=:0 \
-            -e F170_TB_MQTT_ACCESS_TOKEN=${{ secrets.F170_TB_MQTT_ACCESS_TOKEN }} \
-            --log-opt max-size=10m --log-opt max-file=3 \
-            --memory=1g --cpus=1.0 \
-            altem_iot:latest
+      - name: Shut down any running Compose stack
+        run: docker-compose -f docker-compose.yml down || true
 
-      - name: Show container logs if failed
+      - name: Build and deploy with docker-compose
+        env:
+          DISPLAY: ":0"
+          F170_TB_MQTT_ACCESS_TOKEN: ${{ secrets.F170_TB_MQTT_ACCESS_TOKEN }}
+        run: docker-compose -f docker-compose.yml up -d --build
+
+      - name: Show logs if deploy fails
         if: failure()
-        run: docker logs altem_iot
-
+        run: docker-compose -f docker-compose.yml logs --tail=100
