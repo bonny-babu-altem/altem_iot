@@ -23,7 +23,7 @@ jobs:
         env:
           DISPLAY: ":0"
           F170_TB_MQTT_ACCESS_TOKEN: ${{ secrets.F170_TB_MQTT_ACCESS_TOKEN }}
-        run: docker-compose -f docker-compose.yml up -d --build
+        run: docker compose -f docker-compose.yml up -d --build
 
       - name: Show logs if deploy fails
         if: failure()
