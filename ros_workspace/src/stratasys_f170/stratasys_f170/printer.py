@@ -50,7 +50,7 @@ class F170(Node):
             self.get_logger().warning('No data received from f170 device')
             return
 
-        self.get_logger().info(f'Received {parsed_data}')
+        self.get_logger().debug(f'Received {parsed_data}')
 
         self.msg = String()
         self.msg.data = json.dumps(parsed_data)

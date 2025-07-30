@@ -49,7 +49,7 @@ class MQTT:
 
     def publish_data(self, data: dict[str, Any]) -> None:
         msg: str = json.dumps(data)
-        self.__log.debug(f'Publishing data: {msg}')
+        self.__log.info(f'Publishing data: {msg}')
         self.__client.publish(
             topic=self.__topic,
             payload=msg.encode(),
