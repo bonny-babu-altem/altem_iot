@@ -16,33 +16,29 @@ jobs:
       - name: Prune old Docker containers and images
         run: docker system prune -f
 
-      - name: Build Docker images using docker-compose
+      - name: Build Docker images with docker compose
         env:
           DISPLAY: ":0"
           F170_TB_MQTT_ACCESS_TOKEN: ${{ secrets.F170_TB_MQTT_ACCESS_TOKEN }}
         run: |
           docker compose -f docker-compose.yml build
 
-      - name: Deploy stack via Portainer API
+      - name: Deploy or update stack in Portainer via API
         env:
           PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
-          PORTAINER_URL: "https://altempi.local:9443/api"
-          ENDPOINT_ID: "3"
+          PORTAINER_URL: "https://altempi.local:9443/api"  # Replace with your actual Portainer URL
+          ENDPOINT_ID: "3"                                 # Replace with your endpoint ID (usually 1 or 3)
           STACK_NAME: "altem_iot"
         run: |
-          apt-get update
-          apt-get install -y jq curl
-
-          # Read compose file content and escape as JSON string
+          # Use jq and curl assumed pre-installed on runner
           COMPOSE_FILE_PATH=docker-compose.yml
-          COMPOSE_CONTENT=$(jq -Rs '.' < $COMPOSE_FILE_PATH)
+          COMPOSE_CONTENT=$(jq -Rs '.' < "$COMPOSE_FILE_PATH")
 
-          # Check if stack already exists
-          STACK_ID=$(curl -s -k -H "X-API-Key: $PORTAINER_API_KEY" \
-            "$PORTAINER_URL/stacks" | jq ".[] | select(.Name==\"$STACK_NAME\") | .Id")
+          # Check if stack exists and get its ID
+          STACK_ID=$(curl -s -k -H "X-API-Key: $PORTAINER_API_KEY" "$PORTAINER_URL/stacks" | jq -r ".[] | select(.Name==\"$STACK_NAME\") | .Id")
 
-          if [[ -n "$STACK_ID" ]]; then
-            echo "Stack exists. Updating stack in Portainer."
+          if [[ -n "$STACK_ID" && "$STACK_ID" != "null" ]]; then
+            echo "Stack exists with ID: $STACK_ID. Updating stack..."
             curl -s -k -X PUT "$PORTAINER_URL/stacks/$STACK_ID" \
               -H "X-API-Key: $PORTAINER_API_KEY" \
               -H "Content-Type: application/json" \
@@ -52,7 +48,7 @@ jobs:
                 \"Prune\": true
               }"
           else
-            echo "Stack does not exist. Creating new stack in Portainer."
+            echo "Stack does not exist. Creating a new stack..."
             curl -s -k -X POST "$PORTAINER_URL/stacks?method=string&endpointId=$ENDPOINT_ID&name=$STACK_NAME" \
               -H "X-API-Key: $PORTAINER_API_KEY" \
               -H "Content-Type: application/json" \
@@ -62,6 +58,6 @@ jobs:
               }"
           fi
 
-      - name: Show logs if deploy fails
+      - name: Show logs if deployment fails
         if: failure()
         run: docker compose -f docker-compose.yml logs --tail=100
