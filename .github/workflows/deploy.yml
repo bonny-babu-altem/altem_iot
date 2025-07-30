@@ -21,44 +21,42 @@ jobs:
           DISPLAY: ":0"
           F170_TB_MQTT_ACCESS_TOKEN: ${{ secrets.F170_TB_MQTT_ACCESS_TOKEN }}
         run: |
-          # Ensure your docker-compose.yml uses image: (not build:)
+          # Make sure docker-compose.yml uses 'image:', not 'build:'
           docker compose -f docker-compose.yml build
 
       - name: Deploy or update stack in Portainer via API
         env:
           PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
           PORTAINER_URL: "https://altempi.local:9443/api"
-          ENDPOINT_ID: "3"                       # Your Portainer Docker endpoint ID
+          ENDPOINT_ID: "3"
           STACK_NAME: "altem_iot"
           DISPLAY: ":0"
           F170_TB_MQTT_ACCESS_TOKEN: ${{ secrets.F170_TB_MQTT_ACCESS_TOKEN }}
         run: |
           set -e
 
-          # Encode docker-compose.yml content for JSON safely
-          # Compose content must be JSON string of the full YAML
+          # Encode docker-compose.yml as JSON string for API
           COMPOSE_CONTENT=$(jq -Rs '.' < docker-compose.yml)
 
-          # Prepare environment variables array for Portainer (use KEY=VALUE strings)
+          # Prepare environment variables array as "KEY=VALUE" strings
           ENV_VARS=$(jq -n \
             --arg display "$DISPLAY" \
             --arg mqtt "$F170_TB_MQTT_ACCESS_TOKEN" \
             '[ "DISPLAY=\($display)", "F170_TB_MQTT_ACCESS_TOKEN=\($mqtt)" ]')
 
-          # Compose JSON payload for stack create or update
+          # Compose the JSON payload with correct casing per Swagger
           JSON_PAYLOAD=$(jq -n \
             --arg name "$STACK_NAME" \
             --arg stackfile "$COMPOSE_CONTENT" \
             --argjson env "$ENV_VARS" \
-            '{Name: $name, stackFileContent: $stackfile, env: $env}')
+            '{Name: $name, StackFileContent: $stackfile, Env: $env}')
 
-          # Check if stack already exists
+          # Check if stack exists and get its ID
           STACK_ID=$(curl -s -k -H "X-API-Key: $PORTAINER_API_KEY" \
             "$PORTAINER_URL/stacks" | jq -r ".[] | select(.Name==\"$STACK_NAME\") | .Id")
 
           if [[ -n "$STACK_ID" && "$STACK_ID" != "null" ]]; then
             echo "Stack exists with ID: $STACK_ID. Updating stack..."
-
             RESPONSE=$(curl -s -k -w "\n%{http_code}" -X PUT "$PORTAINER_URL/stacks/$STACK_ID" \
               -H "X-API-Key: $PORTAINER_API_KEY" \
               -H "Content-Type: application/json" \
@@ -71,8 +69,7 @@ jobs:
             echo "Response body: $HTTP_BODY"
           else
             echo "Stack does not exist. Creating a new stack..."
-
-            RESPONSE=$(curl -s -k -w "\n%{http_code}" -X POST "$PORTAINER_URL/stacks?type=1&method=string&endpointId=$ENDPOINT_ID" \
+            RESPONSE=$(curl -s -k -w "\n%{http_code}" -X POST "$PORTAINER_URL/stacks/create/standalone/string?endpointId=$ENDPOINT_ID" \
               -H "X-API-Key: $PORTAINER_API_KEY" \
               -H "Content-Type: application/json" \
               --data "$JSON_PAYLOAD")
@@ -83,7 +80,7 @@ jobs:
             echo "Status code: $HTTP_STATUS"
             echo "Response body: $HTTP_BODY"
 
-            # Save compose content for debugging if needed
+            # Save compose content in case you want to debug later
             echo "$COMPOSE_CONTENT" > debug_compose.json
           fi
 
