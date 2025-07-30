@@ -1,4 +1,4 @@
-name: Deploy ROS2 Stack with Portainer Ownership
+name: Deploy on Stable Merge
 
 on:
   push:
@@ -7,81 +7,72 @@ on:
 
 jobs:
   deploy:
-    runs-on: [self-hosted, linux, arm64]
+    runs-on: [self-hosted, linux, arm64]  # Your self-hosted runner labels
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Prune old Docker resources
+      - name: Prune old Docker containers and images (optional)
         run: docker system prune -f
 
-      - name: Stop any existing non-Portainer stack
-        run: docker compose -f docker-compose.yml down || echo "No local stack to stop"
-
-      - name: Build Docker image locally
+      - name: Build and push Docker image
         env:
           DISPLAY: ":0"
           F170_TB_MQTT_ACCESS_TOKEN: ${{ secrets.F170_TB_MQTT_ACCESS_TOKEN }}
         run: |
-          docker compose -f docker-compose.yml build
+          # Build the docker image, adjust path if your Dockerfile location differs
+          docker build -t bonnybk/altem_iot:latest -f docker/Dockerfile .
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+          docker push bonnybk/altem_iot:latest
 
-      - name: Hand over stack management to Portainer
+      - name: Deploy or update stack in Portainer via API
         env:
           PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
           PORTAINER_URL: "https://altempi.local:9443/api"
-          ENDPOINT_ID: "3"
+          ENDPOINT_ID: "3"  # Your Portainer endpoint ID
           STACK_NAME: "altem_iot"
           DISPLAY: ":0"
           F170_TB_MQTT_ACCESS_TOKEN: ${{ secrets.F170_TB_MQTT_ACCESS_TOKEN }}
         run: |
           set -e
 
-          # Prepare environment variables as array of name/value objects as required by Portainer API
+          # Prepare environment variables in Portainer API expected format (array of name/value objects)
           ENV_VARS=$(jq -n \
             --arg display "$DISPLAY" \
             --arg mqtt "$F170_TB_MQTT_ACCESS_TOKEN" \
             '[ { name: "DISPLAY", value: $display }, { name: "F170_TB_MQTT_ACCESS_TOKEN", value: $mqtt } ]')
 
-          # Compose the JSON payload inserting your raw docker-compose.yml as a string correctly
+          # Insert raw docker-compose.yml as string for API
           JSON_PAYLOAD=$(jq -n \
             --arg name "$STACK_NAME" \
-            --rawfile compose docker-compose.yml \
+            --rawfile stackfile docker-compose.yml \
             --argjson env "$ENV_VARS" \
-            '{Name: $name, StackFileContent: $compose, Env: $env}')
+            '{Name: $name, StackFileContent: $stackfile, Env: $env}')
 
-          # Check if stack already exists in Portainer
+          # Check if stack already exists to decide create or update
           STACK_ID=$(curl -s -k -H "X-API-Key: $PORTAINER_API_KEY" \
             "$PORTAINER_URL/stacks" | jq -r ".[] | select(.Name==\"$STACK_NAME\") | .Id")
 
           if [[ -n "$STACK_ID" && "$STACK_ID" != "null" ]]; then
-            echo "Stack exists with ID: $STACK_ID. Updating stack in Portainer..."
+            echo "Stack exists with ID: $STACK_ID. Updating stack..."
             RESPONSE=$(curl -s -k -w "\n%{http_code}" -X PUT "$PORTAINER_URL/stacks/$STACK_ID" \
               -H "X-API-Key: $PORTAINER_API_KEY" \
               -H "Content-Type: application/json" \
               -d "$JSON_PAYLOAD")
-
-            HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
-            HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
-
-            echo "Status code: $HTTP_STATUS"
-            echo "Response body: $HTTP_BODY"
           else
-            echo "Stack does not exist. Creating a new stack in Portainer..."
+            echo "Stack does not exist. Creating a new stack..."
             RESPONSE=$(curl -s -k -w "\n%{http_code}" -X POST "$PORTAINER_URL/stacks/create/standalone/string?endpointId=$ENDPOINT_ID" \
               -H "X-API-Key: $PORTAINER_API_KEY" \
               -H "Content-Type: application/json" \
               --data "$JSON_PAYLOAD")
-
-            HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
-            HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
-
-            echo "Status code: $HTTP_STATUS"
-            echo "Response body: $HTTP_BODY"
-
-            # Optional: save your compose content for offline debugging
-            echo "$COMPOSE_CONTENT" > debug_compose.json
           fi
+
+          HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
+          HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+
+          echo "Status code: $HTTP_STATUS"
+          echo "Response body: $HTTP_BODY"
 
       - name: Show logs if deployment fails
         if: failure()
