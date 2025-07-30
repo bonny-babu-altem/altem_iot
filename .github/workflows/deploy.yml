@@ -21,36 +21,48 @@ jobs:
           DISPLAY: ":0"
           F170_TB_MQTT_ACCESS_TOKEN: ${{ secrets.F170_TB_MQTT_ACCESS_TOKEN }}
         run: |
-          # Ensure the docker-compose.yml uses image: (not build:)
+          # Ensure your docker-compose.yml uses image: (not build:)
           docker compose -f docker-compose.yml build
 
       - name: Deploy or update stack in Portainer via API
         env:
           PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
           PORTAINER_URL: "https://altempi.local:9443/api"
-          ENDPOINT_ID: "3"                       # Your Portainer endpoint ID
+          ENDPOINT_ID: "3"                       # Your Portainer Docker endpoint ID
           STACK_NAME: "altem_iot"
+          DISPLAY: ":0"
+          F170_TB_MQTT_ACCESS_TOKEN: ${{ secrets.F170_TB_MQTT_ACCESS_TOKEN }}
         run: |
           set -e
 
-          # Encode docker-compose.yml as a JSON string 
-          COMPOSE_FILE_PATH=docker-compose.yml
-          COMPOSE_CONTENT=$(jq -Rs '.' < "$COMPOSE_FILE_PATH")
+          # Encode docker-compose.yml content for JSON safely
+          # Compose content must be JSON string of the full YAML
+          COMPOSE_CONTENT=$(jq -Rs '.' < docker-compose.yml)
 
-          # Check if the stack already exists and get its ID
+          # Prepare environment variables array for Portainer (use KEY=VALUE strings)
+          ENV_VARS=$(jq -n \
+            --arg display "$DISPLAY" \
+            --arg mqtt "$F170_TB_MQTT_ACCESS_TOKEN" \
+            '[ "DISPLAY=\($display)", "F170_TB_MQTT_ACCESS_TOKEN=\($mqtt)" ]')
+
+          # Compose JSON payload for stack create or update
+          JSON_PAYLOAD=$(jq -n \
+            --arg name "$STACK_NAME" \
+            --arg stackfile "$COMPOSE_CONTENT" \
+            --argjson env "$ENV_VARS" \
+            '{Name: $name, stackFileContent: $stackfile, env: $env}')
+
+          # Check if stack already exists
           STACK_ID=$(curl -s -k -H "X-API-Key: $PORTAINER_API_KEY" \
             "$PORTAINER_URL/stacks" | jq -r ".[] | select(.Name==\"$STACK_NAME\") | .Id")
 
           if [[ -n "$STACK_ID" && "$STACK_ID" != "null" ]]; then
             echo "Stack exists with ID: $STACK_ID. Updating stack..."
+
             RESPONSE=$(curl -s -k -w "\n%{http_code}" -X PUT "$PORTAINER_URL/stacks/$STACK_ID" \
               -H "X-API-Key: $PORTAINER_API_KEY" \
               -H "Content-Type: application/json" \
-              -d "{
-                \"StackFileContent\": $COMPOSE_CONTENT,
-                \"Env\": [],
-                \"Prune\": true
-              }")
+              -d "$JSON_PAYLOAD")
 
             HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
             HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
@@ -59,24 +71,20 @@ jobs:
             echo "Response body: $HTTP_BODY"
           else
             echo "Stack does not exist. Creating a new stack..."
-            # Create JSON string of your compose YAML
-            COMPOSE_CONTENT=$(jq -Rs '.' < docker-compose.yml)
-            
-            # Send to the Portainer API using the correct endpoint
-            RESPONSE=$(curl -s -k -w "\n%{http_code}" -X POST "https://altempi.local:9443/api/stacks?type=1&method=string&endpointId=3" \
+
+            RESPONSE=$(curl -s -k -w "\n%{http_code}" -X POST "$PORTAINER_URL/stacks?type=1&method=string&endpointId=$ENDPOINT_ID" \
               -H "X-API-Key: $PORTAINER_API_KEY" \
               -H "Content-Type: application/json" \
-              --data "{
-                \"Name\": \"altem_iot\",
-                \"stackFileContent\": $COMPOSE_CONTENT,
-                \"env\": []
-              }")
-            
+              --data "$JSON_PAYLOAD")
+
             HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
             HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
-            
+
             echo "Status code: $HTTP_STATUS"
             echo "Response body: $HTTP_BODY"
+
+            # Save compose content for debugging if needed
+            echo "$COMPOSE_CONTENT" > debug_compose.json
           fi
 
       - name: Show logs if deployment fails
