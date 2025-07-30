@@ -66,13 +66,14 @@ jobs:
           else
             echo "Stack does not exist. Creating a new stack..."
           
-            RESPONSE=$(curl -s -k -w "\n%{http_code}" -X POST "$PORTAINER_URL/stacks?method=string&endpointId=$ENDPOINT_ID&name=$STACK_NAME" \
-              -H "X-API-Key: $PORTAINER_API_KEY" \
-              -H "Content-Type: application/json" \
-              --data "{
-                \"stackFileContent\": $COMPOSE_CONTENT,
-                \"env\": []
-              }")
+            RESPONSE=$(curl -s -k -w "\n%{http_code}" -X POST "$PORTAINER_URL/stacks?type=1&method=string&endpointId=$ENDPOINT_ID" \
+            -H "X-API-Key: $PORTAINER_API_KEY" \
+            -H "Content-Type: application/json" \
+            --data "{
+              \"Name\": \"$STACK_NAME\",
+              \"stackFileContent\": $COMPOSE_CONTENT,
+              \"env\": []
+            }")
           
             HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
             HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
