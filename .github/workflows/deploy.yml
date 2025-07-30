@@ -59,23 +59,24 @@ jobs:
             echo "Response body: $HTTP_BODY"
           else
             echo "Stack does not exist. Creating a new stack..."
-            RESPONSE=$(curl -s -k -w "\n%{http_code}" -X POST "$PORTAINER_URL/stacks?type=1&method=string&endpointId=$ENDPOINT_ID" \
+            # Create JSON string of your compose YAML
+            COMPOSE_CONTENT=$(jq -Rs '.' < docker-compose.yml)
+            
+            # Send to the Portainer API using the correct endpoint
+            RESPONSE=$(curl -s -k -w "\n%{http_code}" -X POST "https://altempi.local:9443/api/stacks?type=1&method=string&endpointId=3" \
               -H "X-API-Key: $PORTAINER_API_KEY" \
               -H "Content-Type: application/json" \
               --data "{
-                \"Name\": \"$STACK_NAME\",
+                \"Name\": \"altem_iot\",
                 \"stackFileContent\": $COMPOSE_CONTENT,
                 \"env\": []
               }")
-
+            
             HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
             HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
-
+            
             echo "Status code: $HTTP_STATUS"
             echo "Response body: $HTTP_BODY"
-
-            # Save compose content for debugging if needed
-            echo "$COMPOSE_CONTENT" > debug_compose.json
           fi
 
       - name: Show logs if deployment fails
