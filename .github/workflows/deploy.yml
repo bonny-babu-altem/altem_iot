@@ -31,6 +31,7 @@ jobs:
         run: |
           STACK_DIR=/opt/stacks/altem_iot
           sudo mkdir -p $STACK_DIR
+          sudo chown -R production:production  $STACK_DIR
 
           # Save .env file with secrets
           echo "DISPLAY=:0" > $STACK_DIR/.env
