@@ -27,27 +27,30 @@ jobs:
         env:
           PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
           PORTAINER_URL: "https://altempi.local:9443/api"
-          ENDPOINT_ID: "3"                  # Your Portainer endpoint ID
+          ENDPOINT_ID: "3"
           STACK_NAME: "altem_iot"
           DISPLAY: ":0"
           F170_TB_MQTT_ACCESS_TOKEN: ${{ secrets.F170_TB_MQTT_ACCESS_TOKEN }}
         run: |
           set -e
 
-          # Prepare environment variables as array of objects {name: ..., value: ...}
+          # Prepare environment variables as array of objects {name,value}
           ENV_VARS=$(jq -n \
             --arg display "$DISPLAY" \
             --arg mqtt "$F170_TB_MQTT_ACCESS_TOKEN" \
             '[ { name: "DISPLAY", value: $display }, { name: "F170_TB_MQTT_ACCESS_TOKEN", value: $mqtt } ]')
 
-          # Insert raw docker-compose.yml as a string in the payload
-          JSON_PAYLOAD=$(jq -n \
+          # Base JSON payload for POST (creation) WITHOUT EndpointID
+          BASE_PAYLOAD=$(jq -n \
             --arg name "$STACK_NAME" \
-            --rawfile compose docker-compose.yml \
+            --rawfile stackfile docker-compose.yml \
             --argjson env "$ENV_VARS" \
-            '{Name: $name, StackFileContent: $compose, Env: $env}')
+            '{Name: $name, StackFileContent: $stackfile, Env: $env}')
 
-          # Check if the stack already exists in Portainer and get its ID
+          # Add EndpointID field to payload for PUT (update)
+          UPDATE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --arg endpointId "$ENDPOINT_ID" '. + {EndpointID: ($endpointId | tonumber)}')
+
+          # Check if stack exists in Portainer
           STACK_ID=$(curl -s -k -H "X-API-Key: $PORTAINER_API_KEY" \
             "$PORTAINER_URL/stacks" | jq -r ".[] | select(.Name==\"$STACK_NAME\") | .Id")
 
@@ -56,7 +59,7 @@ jobs:
             RESPONSE=$(curl -s -k -w "\n%{http_code}" -X PUT "$PORTAINER_URL/stacks/$STACK_ID" \
               -H "X-API-Key: $PORTAINER_API_KEY" \
               -H "Content-Type: application/json" \
-              -d "$JSON_PAYLOAD")
+              -d "$UPDATE_PAYLOAD")
 
             HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
             HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
@@ -68,7 +71,7 @@ jobs:
             RESPONSE=$(curl -s -k -w "\n%{http_code}" -X POST "$PORTAINER_URL/stacks/create/standalone/string?endpointId=$ENDPOINT_ID" \
               -H "X-API-Key: $PORTAINER_API_KEY" \
               -H "Content-Type: application/json" \
-              --data "$JSON_PAYLOAD")
+              --data "$BASE_PAYLOAD")
 
             HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
             HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
