@@ -49,7 +49,8 @@ class MQTT:
 
     def publish_data(self, data: dict[str, Any]) -> None:
         msg: str = json.dumps(data)
-        self.__log.info(f'Publishing data: {msg}')
+        self.__log.info(
+            f'Publishing data [topic: {self.__topic}, {self.__host}:{self.__port}]')
         self.__client.publish(
             topic=self.__topic,
             payload=msg.encode(),
