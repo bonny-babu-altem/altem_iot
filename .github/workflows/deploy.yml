@@ -1,4 +1,4 @@
-name: Deploy on Stable Merge
+name: Deploy ROS2 Stack with Portainer Ownership
 
 on:
   push:
@@ -13,18 +13,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Prune old Docker containers and images
+      - name: Prune old Docker resources
         run: docker system prune -f
 
-      - name: Build Docker images with docker compose
+      - name: Stop any existing non-Portainer stack
+        run: docker compose -f docker-compose.yml down || echo "No local stack to stop"
+
+      - name: Build Docker image locally
         env:
           DISPLAY: ":0"
           F170_TB_MQTT_ACCESS_TOKEN: ${{ secrets.F170_TB_MQTT_ACCESS_TOKEN }}
         run: |
-          # Make sure your docker-compose.yml uses 'image:' (no 'build:')
           docker compose -f docker-compose.yml build
 
-      - name: Deploy or update stack in Portainer via API
+      - name: Hand over stack management to Portainer
         env:
           PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
           PORTAINER_URL: "https://altempi.local:9443/api"
@@ -35,25 +37,25 @@ jobs:
         run: |
           set -e
 
-          # Prepare environment variables as an array of objects with name and value
+          # Prepare environment variables as array of name/value objects as required by Portainer API
           ENV_VARS=$(jq -n \
             --arg display "$DISPLAY" \
             --arg mqtt "$F170_TB_MQTT_ACCESS_TOKEN" \
             '[ { name: "DISPLAY", value: $display }, { name: "F170_TB_MQTT_ACCESS_TOKEN", value: $mqtt } ]')
 
-          # Prepare JSON payload inserting compose YAML as a raw string
+          # Compose the JSON payload inserting your raw docker-compose.yml as a string correctly
           JSON_PAYLOAD=$(jq -n \
             --arg name "$STACK_NAME" \
-            --rawfile stackfile docker-compose.yml \
+            --rawfile compose docker-compose.yml \
             --argjson env "$ENV_VARS" \
-            '{Name: $name, StackFileContent: $stackfile, Env: $env}')
+            '{Name: $name, StackFileContent: $compose, Env: $env}')
 
-          # Check if the stack already exists and get its ID
+          # Check if stack already exists in Portainer
           STACK_ID=$(curl -s -k -H "X-API-Key: $PORTAINER_API_KEY" \
             "$PORTAINER_URL/stacks" | jq -r ".[] | select(.Name==\"$STACK_NAME\") | .Id")
 
           if [[ -n "$STACK_ID" && "$STACK_ID" != "null" ]]; then
-            echo "Stack exists with ID: $STACK_ID. Updating stack..."
+            echo "Stack exists with ID: $STACK_ID. Updating stack in Portainer..."
             RESPONSE=$(curl -s -k -w "\n%{http_code}" -X PUT "$PORTAINER_URL/stacks/$STACK_ID" \
               -H "X-API-Key: $PORTAINER_API_KEY" \
               -H "Content-Type: application/json" \
@@ -65,7 +67,7 @@ jobs:
             echo "Status code: $HTTP_STATUS"
             echo "Response body: $HTTP_BODY"
           else
-            echo "Stack does not exist. Creating a new stack..."
+            echo "Stack does not exist. Creating a new stack in Portainer..."
             RESPONSE=$(curl -s -k -w "\n%{http_code}" -X POST "$PORTAINER_URL/stacks/create/standalone/string?endpointId=$ENDPOINT_ID" \
               -H "X-API-Key: $PORTAINER_API_KEY" \
               -H "Content-Type: application/json" \
@@ -77,7 +79,7 @@ jobs:
             echo "Status code: $HTTP_STATUS"
             echo "Response body: $HTTP_BODY"
 
-            # Optional: save the compose content for troubleshooting
+            # Optional: save your compose content for offline debugging
             echo "$COMPOSE_CONTENT" > debug_compose.json
           fi
 
