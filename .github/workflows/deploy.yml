@@ -45,16 +45,15 @@ jobs:
             --arg name "$STACK_NAME" \
             --rawfile stackfile docker-compose.yml \
             --argjson env "$ENV_VARS" \
-            --argjson endpointId "$ENDPOINT_ID" \
             --argjson prune true \
             --argjson pullImage false \
+            --arg endpointId "$ENDPOINT_ID" \
             '{ 
                 Name: $name, 
                 StackFileContent: $stackfile, 
                 Env: $env,
                 Prune: $prune,
-                PullImage: $pullImage,
-                EndpointID: $endpointId
+                PullImage: $pullImage
             }')
 
           # Query Portainer to check if stack exists
@@ -63,7 +62,7 @@ jobs:
 
           if [[ -n "$STACK_ID" && "$STACK_ID" != "null" ]]; then
             echo "Stack exists with ID: $STACK_ID. Updating stack..."
-            RESPONSE=$(curl -s -k -w "\n%{http_code}" -X PUT "$PORTAINER_URL/stacks/$STACK_ID" \
+            RESPONSE=$(curl -s -k -w "\n%{http_code}" -X PUT "$PORTAINER_URL/stacks/$STACK_ID?endpointId=$ENDPOINT_ID" \
               -H "X-API-Key: $PORTAINER_API_KEY" \
               -H "Content-Type: application/json" \
               -d "$JSON_PAYLOAD")
