@@ -1,8 +1,6 @@
-version: "3.8"
-
 services:
   ros:
-    image: bonnybk/altem_iot:latest  # <-- Change this to your image
+    image: my-local/altem_iot:latest
     container_name: f170_ros
     environment:
       DISPLAY: ${DISPLAY}
