@@ -36,6 +36,9 @@ jobs:
           ENDPOINT_ID: "3"
           STACK_NAME: "altem_iot"
         run: |
+          sudo apt-get update
+          sudo apt-get install -y jq curl
+          
           set -e
           COMPOSE_FILE_PATH=docker-compose.yml
           COMPOSE_CONTENT=$(jq -Rs '.' < "$COMPOSE_FILE_PATH")
