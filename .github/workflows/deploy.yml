@@ -48,7 +48,8 @@ jobs:
 
           if [[ -n "$STACK_ID" && "$STACK_ID" != "null" ]]; then
             echo "Stack exists with ID: $STACK_ID. Updating stack..."
-            RESPONSE=$(curl -s -k -X PUT "$PORTAINER_URL/stacks/$STACK_ID" \
+          
+            RESPONSE=$(curl -s -k -w "\n%{http_code}" -X PUT "$PORTAINER_URL/stacks/$STACK_ID" \
               -H "X-API-Key: $PORTAINER_API_KEY" \
               -H "Content-Type: application/json" \
               -d "{
@@ -56,24 +57,30 @@ jobs:
                 \"Env\": [],
                 \"Prune\": true
               }")
-            echo "Update response: $RESPONSE"
+          
+            HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
+            HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+          
+            echo "Status code: $HTTP_STATUS"
+            echo "Response body: $HTTP_BODY"
           else
             echo "Stack does not exist. Creating a new stack..."
-            RESPONSE=$(curl -s -k -X POST "$PORTAINER_URL/stacks?method=string&endpointId=$ENDPOINT_ID&name=$STACK_NAME" \
+          
+            RESPONSE=$(curl -s -k -w "\n%{http_code}" -X POST "$PORTAINER_URL/stacks?method=string&endpointId=$ENDPOINT_ID&name=$STACK_NAME" \
               -H "X-API-Key: $PORTAINER_API_KEY" \
               -H "Content-Type: application/json" \
               --data "{
                 \"stackFileContent\": $COMPOSE_CONTENT,
                 \"env\": []
               }")
-            echo "Create response: $RESPONSE"
-
+          
             HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
             HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
-            
+          
             echo "Status code: $HTTP_STATUS"
             echo "Response body: $HTTP_BODY"
-
+          
+            # Save compose content for debugging if needed
             echo "$COMPOSE_CONTENT" > debug_compose.json
           fi
 
