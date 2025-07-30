@@ -21,34 +21,28 @@ jobs:
           DISPLAY: ":0"
           F170_TB_MQTT_ACCESS_TOKEN: ${{ secrets.F170_TB_MQTT_ACCESS_TOKEN }}
         run: |
-          # Ensure your docker-compose.yml uses 'image:' not 'build:' for services
+          # Ensure the docker-compose.yml uses image: (not build:)
           docker compose -f docker-compose.yml build
-
-      # (Optional) Push images to registry if needed, e.g.,
-      # - name: Push image to Docker Hub
-      #   run: |
-      #     docker push yourrepo/yourimage:latest
 
       - name: Deploy or update stack in Portainer via API
         env:
           PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
           PORTAINER_URL: "https://altempi.local:9443/api"
-          ENDPOINT_ID: "3"
+          ENDPOINT_ID: "3"                       # Your Portainer endpoint ID
           STACK_NAME: "altem_iot"
         run: |
-          sudo apt-get update
-          sudo apt-get install -y jq curl
-          
           set -e
+
+          # Encode docker-compose.yml as a JSON string 
           COMPOSE_FILE_PATH=docker-compose.yml
           COMPOSE_CONTENT=$(jq -Rs '.' < "$COMPOSE_FILE_PATH")
 
+          # Check if the stack already exists and get its ID
           STACK_ID=$(curl -s -k -H "X-API-Key: $PORTAINER_API_KEY" \
             "$PORTAINER_URL/stacks" | jq -r ".[] | select(.Name==\"$STACK_NAME\") | .Id")
 
           if [[ -n "$STACK_ID" && "$STACK_ID" != "null" ]]; then
             echo "Stack exists with ID: $STACK_ID. Updating stack..."
-          
             RESPONSE=$(curl -s -k -w "\n%{http_code}" -X PUT "$PORTAINER_URL/stacks/$STACK_ID" \
               -H "X-API-Key: $PORTAINER_API_KEY" \
               -H "Content-Type: application/json" \
@@ -57,30 +51,29 @@ jobs:
                 \"Env\": [],
                 \"Prune\": true
               }")
-          
+
             HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
             HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
-          
+
             echo "Status code: $HTTP_STATUS"
             echo "Response body: $HTTP_BODY"
           else
             echo "Stack does not exist. Creating a new stack..."
-          
             RESPONSE=$(curl -s -k -w "\n%{http_code}" -X POST "$PORTAINER_URL/stacks?type=1&method=string&endpointId=$ENDPOINT_ID" \
-            -H "X-API-Key: $PORTAINER_API_KEY" \
-            -H "Content-Type: application/json" \
-            --data "{
-              \"Name\": \"$STACK_NAME\",
-              \"stackFileContent\": $COMPOSE_CONTENT,
-              \"env\": []
-            }")
-          
+              -H "X-API-Key: $PORTAINER_API_KEY" \
+              -H "Content-Type: application/json" \
+              --data "{
+                \"Name\": \"$STACK_NAME\",
+                \"stackFileContent\": $COMPOSE_CONTENT,
+                \"env\": []
+              }")
+
             HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
             HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
-          
+
             echo "Status code: $HTTP_STATUS"
             echo "Response body: $HTTP_BODY"
-          
+
             # Save compose content for debugging if needed
             echo "$COMPOSE_CONTENT" > debug_compose.json
           fi
