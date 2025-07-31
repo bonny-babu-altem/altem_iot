@@ -8,8 +8,11 @@
 		"cSpell.words": [
 			"altem",
 			"altempi",
+			"asyncio",
 			"colcon",
 			"cpus",
+			"httpx",
+			"keepalive",
 			"MITSHM",
 			"paho",
 			"pkgs",

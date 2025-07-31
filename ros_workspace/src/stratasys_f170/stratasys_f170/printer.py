@@ -1,20 +1,22 @@
+import asyncio
 import json
 from typing import Any
+
 import rclpy
-from rclpy.impl.rcutils_logger import RcutilsLogger
 from rclpy.node import Node
 from rclpy.publisher import Publisher
-from rclpy.timer import Timer
 from std_msgs.msg import String
-from stratasys_f170.device import get_device_status
+
+from stratasys_f170.device import DeviceClient
 from stratasys_f170.xml_parser import parse_data
-from stratasys_f170.mqtt_publisher import MQTT
+from stratasys_f170.mqtt_publisher import MQTTClient
 
 
 class F170(Node):
     def __init__(self) -> None:
-        super().__init__('f170', namespace="printer/stratasys")
+        super().__init__('f170', namespace='printer/stratasys')
 
+        # Parameters
         self.access_token: str = self.declare_parameter(
             'access_token', '').get_parameter_value().string_value
 
@@ -27,49 +29,72 @@ class F170(Node):
         self.tb_port: int = self.declare_parameter(
             'tb_port', 1883).get_parameter_value().integer_value
 
+        # ROS Publisher
         self.publisher_: Publisher = self.create_publisher(
             String, 'status', 10)
 
-        self.iot = MQTT(
-            token=self.access_token,
-            log=self.get_logger(),
-            host=self.tb_host,
-            port=self.tb_port
-        )
+        self.get_logger().info(f"Configured F170 for {self.device_ip}")
+        self.get_logger().info(f"MQTT → {self.tb_host}:{self.tb_port}")
 
-        self.get_logger().info(f'TB: {self.tb_host}:{self.tb_port}')
-        self.get_logger().info(f'F170 IP: {self.device_ip}')
+    async def run_async(self) -> None:
+        self.get_logger().info("Connecting....")
+        try:
+            async with MQTTClient(
+                token=self.access_token,
+                host=self.tb_host,
+                port=self.tb_port,
+                log=self.get_logger()
+            ) as mqtt:
 
-        self.iot.connect()
+                while rclpy.ok():
+                    try:
+                        async with DeviceClient(ip=self.device_ip, log=self.get_logger()) as device:
+                            xml: str = await device.get_status()
+                            parsed: None | dict[str, Any] = parse_data(xml)
+                            if parsed:
+                                self.publish(parsed)
+                                await mqtt.publish_data(data=parsed)
 
-        self.timer: Timer = self.create_timer(0.005, self.publish_callback)
+                    except Exception as e:
+                        self.get_logger().error(f"Error polling device: {e}")
 
-    def publish_callback(self) -> None:
-        parsed_data: None | dict[str, Any] = self.get_device_data()
-        if parsed_data is None:
-            self.get_logger().warning('No data received from f170 device')
-            return
+                    await asyncio.sleep(1.0)
 
-        self.get_logger().debug(f'Received {parsed_data}')
+        except Exception as e:
+            self.get_logger().error(f"MQTT initialization failed: {e}")
 
-        self.msg = String()
-        self.msg.data = json.dumps(parsed_data)
-
-        self.iot.publish_data(data=parsed_data)
-        self.publisher_.publish(self.msg)
-
-    def get_device_data(self) -> None | dict[str, Any]:
-        xml_data: str = get_device_status(ip=self.device_ip)
-        return parse_data(xml_data=xml_data)
+    def publish(self, data: dict[str, Any]) -> None:
+        msg = String()
+        msg.data = json.dumps(data)
+        self.publisher_.publish(msg)
 
 
 def main(args=None):
     rclpy.init(args=args)
     node = F170()
+
+    loop = asyncio.get_event_loop()
+
     try:
+        # Start the background asyncio task manually
+        loop.create_task(node.run_async())
+
+        # Now spin the ROS node (blocking)
         rclpy.spin(node)
-    except Exception as e:
-        node.get_logger().error(f"An Exception: {e} has occurred.")
+
+    except KeyboardInterrupt:
+        node.get_logger().info("KeyboardInterrupt received.")
     finally:
         node.destroy_node()
         rclpy.shutdown()
+
+        # Cleanup asyncio loop
+        pending = asyncio.all_tasks(loop)
+        for task in pending:
+            task.cancel()
+        try:
+            loop.run_until_complete(asyncio.gather(
+                *pending, return_exceptions=True))
+        except Exception:
+            pass
+        loop.close()

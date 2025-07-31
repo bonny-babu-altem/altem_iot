@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y \
     iputils-ping \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --break-system-packages python-dotenv requests paho-mqtt
+RUN pip install --break-system-packages python-dotenv httpx asyncio-mqtt
 
 COPY ./ros_workspace /ros_workspace
 
