@@ -66,6 +66,10 @@ class F170(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = F170()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except Exception as e:
+        node.get_logger().error(f"An Exception: {e} has occurred.")
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()

@@ -1,4 +1,4 @@
-name: Deploy on Stable Merge
+name: Deploy ROS2 Stack on Local Portainer
 
 on:
   push:
@@ -13,55 +13,73 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Prune old Docker containers and images
+      - name: Prune old Docker resources (optional)
         run: docker system prune -f
 
-      - name: Build Docker images using docker-compose
+      - name: Build Docker image locally (no push)
         env:
           DISPLAY: ":0"
           F170_TB_MQTT_ACCESS_TOKEN: ${{ secrets.F170_TB_MQTT_ACCESS_TOKEN }}
         run: |
-          docker compose -f docker-compose.yml build
+          docker build -t my-local/altem_iot:latest -f docker/Dockerfile .
 
-      - name: Deploy stack via Portainer API
+      - name: Deploy or update stack in Portainer via API
         env:
           PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
           PORTAINER_URL: "https://altempi.local:9443/api"
           ENDPOINT_ID: "3"
           STACK_NAME: "altem_iot"
+          DISPLAY: ":0"
+          F170_TB_MQTT_ACCESS_TOKEN: ${{ secrets.F170_TB_MQTT_ACCESS_TOKEN }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y jq curl
+          set -e
 
-          # Read compose file content and escape as JSON string
-          COMPOSE_FILE_PATH=docker-compose.yml
-          COMPOSE_CONTENT=$(jq -Rs '.' < $COMPOSE_FILE_PATH)
+          # Prepare environment variables as array of objects {name, value}
+          ENV_VARS=$(jq -n \
+            --arg display "$DISPLAY" \
+            --arg mqtt "$F170_TB_MQTT_ACCESS_TOKEN" \
+            '[ { name: "DISPLAY", value: $display }, { name: "F170_TB_MQTT_ACCESS_TOKEN", value: $mqtt } ]')
 
-          # Check if stack already exists
+          # Create JSON payload with all required fields for update/create
+          JSON_PAYLOAD=$(jq -n \
+            --arg name "$STACK_NAME" \
+            --rawfile stackfile docker-compose.yml \
+            --argjson env "$ENV_VARS" \
+            --argjson prune true \
+            --argjson pullImage false \
+            --arg endpointId "$ENDPOINT_ID" \
+            '{ 
+                Name: $name, 
+                StackFileContent: $stackfile, 
+                Env: $env,
+                Prune: $prune,
+                PullImage: $pullImage
+            }')
+
+          # Query Portainer to check if stack exists
           STACK_ID=$(curl -s -k -H "X-API-Key: $PORTAINER_API_KEY" \
-            "$PORTAINER_URL/stacks" | jq ".[] | select(.Name==\"$STACK_NAME\") | .Id")
+            "$PORTAINER_URL/stacks" | jq -r ".[] | select(.Name==\"$STACK_NAME\") | .Id")
 
-          if [[ -n "$STACK_ID" ]]; then
-            echo "Stack exists. Updating stack in Portainer."
-            curl -s -k -X PUT "$PORTAINER_URL/stacks/$STACK_ID" \
+          if [[ -n "$STACK_ID" && "$STACK_ID" != "null" ]]; then
+            echo "Stack exists with ID: $STACK_ID. Updating stack..."
+            RESPONSE=$(curl -s -k -w "\n%{http_code}" -X PUT "$PORTAINER_URL/stacks/$STACK_ID?endpointId=$ENDPOINT_ID" \
               -H "X-API-Key: $PORTAINER_API_KEY" \
               -H "Content-Type: application/json" \
-              -d "{
-                \"StackFileContent\": $COMPOSE_CONTENT,
-                \"Env\": [],
-                \"Prune\": true
-              }"
+              -d "$JSON_PAYLOAD")
           else
-            echo "Stack does not exist. Creating new stack in Portainer."
-            curl -s -k -X POST "$PORTAINER_URL/stacks?method=string&endpointId=$ENDPOINT_ID&name=$STACK_NAME" \
+            echo "Stack does not exist. Creating a new stack..."
+            RESPONSE=$(curl -s -k -w "\n%{http_code}" -X POST "$PORTAINER_URL/stacks/create/standalone/string?endpointId=$ENDPOINT_ID" \
               -H "X-API-Key: $PORTAINER_API_KEY" \
               -H "Content-Type: application/json" \
-              --data "{
-                \"stackFileContent\": $COMPOSE_CONTENT,
-                \"env\": []
-              }"
+              --data "$JSON_PAYLOAD")
           fi
 
-      - name: Show logs if deploy fails
+          HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
+          HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+
+          echo "Status code: $HTTP_STATUS"
+          echo "Response body: $HTTP_BODY"
+
+      - name: Show logs if deployment fails
         if: failure()
         run: docker compose -f docker-compose.yml logs --tail=100
