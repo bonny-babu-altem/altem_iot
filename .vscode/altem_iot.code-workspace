@@ -8,8 +8,13 @@
 		"cSpell.words": [
 			"altem",
 			"altempi",
+			"amqtt",
 			"colcon",
 			"cpus",
+			"gmqtt",
+			"httpx",
+			"iputils",
+			"keepalive",
 			"MITSHM",
 			"paho",
 			"pkgs",
