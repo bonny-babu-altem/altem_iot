@@ -98,10 +98,19 @@ class F170(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = F170()
+
     try:
         rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.get_logger().info("KeyboardInterrupt received. Exiting gracefully...")
     except Exception as e:
-        node.get_logger().error(f"An Exception: {e} has occurred.")
+        node.get_logger().error(f"Unexpected exception: {e}")
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+
+        # Only shut down if still running
+        if rclpy.ok():
+            try:
+                rclpy.shutdown()
+            except Exception as e:
+                node.get_logger().warn(f"Ignoring shutdown error: {e}")
